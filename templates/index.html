@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Room Cleaning Upload</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        #preview { width: 320px; height: 240px; border: 1px solid #ccc; margin-bottom: 1em; }
+        #result { margin-top: 1em; }
+    </style>
+</head>
+<body>
+    <h2>Upload Cleaned Room Photo</h2>
+    <video id="video" width="320" height="240" autoplay></video><br>
+    <button id="capture">Capture Photo</button>
+    <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+    <div id="preview"></div>
+    <button id="upload" disabled>Upload</button>
+    <div id="result"></div>
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const preview = document.getElementById('preview');
+        const captureBtn = document.getElementById('capture');
+        const uploadBtn = document.getElementById('upload');
+        let imageBlob = null;
+        let lat = null, lng = null;
+
+        // Start camera
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => { alert('Camera access denied: ' + err); });
+
+        // Get location
+        function getLocation() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject('Geolocation not supported');
+                } else {
+                    navigator.geolocation.getCurrentPosition(
+                        pos => {
+                            lat = pos.coords.latitude;
+                            lng = pos.coords.longitude;
+                            resolve();
+                        },
+                        err => { reject('Location error: ' + err.message); }
+                    );
+                }
+            });
+        }
+
+        captureBtn.onclick = async function() {
+            try {
+                await getLocation();
+            } catch (e) {
+                alert(e);
+                return;
+            }
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(blob => {
+                imageBlob = blob;
+                const url = URL.createObjectURL(blob);
+                preview.innerHTML = `<img src="${url}" width="320" height="240">`;
+                uploadBtn.disabled = false;
+            }, 'image/jpeg');
+        };
+
+        uploadBtn.onclick = function() {
+            if (!imageBlob || lat === null || lng === null) {
+                alert('No image or location');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('image', imageBlob, 'photo.jpg');
+            formData.append('lat', lat);
+            formData.append('lng', lng);
+            formData.append('timestamp', Date.now() / 1000);
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+                uploadBtn.disabled = true;
+            })
+            .catch(err => {
+                document.getElementById('result').innerText = 'Error: ' + err;
+            });
+        };
+    </script>
+</body>
+</html> 
