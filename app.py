@@ -9,6 +9,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import exifread
 from numpy.linalg import norm
+from cleanliness_model import CleanlinessPredictor
 
 app = Flask(__name__)
 
@@ -24,6 +25,9 @@ limiter = Limiter(
     app=app,
     default_limits=["200 per day", "50 per hour"]
 )
+
+# Initialize the predictor
+predictor = CleanlinessPredictor()
 
 def haversine(lat1, lng1, lat2, lng2):
     R = 6371000 
@@ -138,10 +142,15 @@ def upload():
     except Exception:
         return jsonify({'error': 'Invalid image'}), 400
 
+    # Get cleanliness prediction
+    cleanliness_result = predictor.predict(image_bytes)
+    if 'error' in cleanliness_result:
+        return jsonify({'error': f'Cleanliness prediction failed: {cleanliness_result["error"]}'}), 400
+
     # Image similarity check
     for entry in images_db:
         similarity = image_similarity(image_bytes, entry['image_bytes'])
-        if similarity > 0.95:  # Threshold for considering images too similar
+        if similarity > 0.95:
             return jsonify({'error': 'Image too similar to previous upload', 'similarity': float(similarity)}), 400
 
     images_db.append({
@@ -151,9 +160,14 @@ def upload():
         'image_bytes': image_bytes,
         'exif_lat': exif_lat,
         'exif_lng': exif_lng,
-        'exif_time': exif_time
+        'exif_time': exif_time,
+        'cleanliness': cleanliness_result
     })
-    return jsonify({'success': True})
+    
+    return jsonify({
+        'success': True,
+        'cleanliness': cleanliness_result
+    })
 
 if __name__ == '__main__':
     app.run(debug=True) 
