@@ -6,3 +6,4 @@ numpy==2.0.2
 Flask-Login==0.6.3
 Flask-Limiter==3.11.0
 exifread==3.3.1 
+gunicorn==23.0.0
