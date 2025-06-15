@@ -198,11 +198,15 @@
 
           const result = await response.json();
 
-          if (response.ok) {
+          if (result.success) {
             showStatus("Upload successful!", false);
-            displayCleanlinessResult(result.cleanliness);
+            cleanlinessDiv.style.display = "block";
+            cleanlinessScore.textContent = `Confidence: ${result.cleanliness.confidence.toFixed(
+              2
+            )}`;
+            cleanlinessLabel.textContent = `Prediction: ${result.cleanliness.prediction}`;
           } else {
-            showStatus("Error: " + result.error, true);
+            showStatus("Upload failed: " + result.error, true);
           }
         } catch (err) {
           showStatus("Error: " + err.message, true);
@@ -217,14 +221,6 @@
         statusDiv.textContent = message;
         statusDiv.className = "status " + (isError ? "error" : "success");
         statusDiv.style.display = "block";
-      }
-
-      function displayCleanlinessResult(result) {
-        cleanlinessDiv.style.display = "block";
-        cleanlinessScore.textContent = `Cleanliness Score: ${result.score.toFixed(
-          2
-        )}`;
-        cleanlinessLabel.textContent = `Classification: ${result.classification}`;
       }
 
       function dataURLtoBlob(dataURL) {

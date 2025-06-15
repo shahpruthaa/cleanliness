@@ -35,10 +35,12 @@ class CleanlinessModel:
         os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
         joblib.dump(self.classifier, self.model_path)
     
-    def _preprocess_image(self, image_path):
+    def _preprocess_image(self, image_input):
         try:
-            # Load and convert to grayscale
-            image = Image.open(image_path).convert('L')
+            if isinstance(image_input, bytes):
+                image = Image.open(io.BytesIO(image_input)).convert('L')
+            else:
+                image = Image.open(image_input).convert('L')
             
             # Resize to standard size
             image = image.resize((128, 128))
@@ -50,10 +52,10 @@ class CleanlinessModel:
         except Exception as e:
             raise Exception(f"Error preprocessing image: {str(e)}")
     
-    def extract_features(self, image_path):
+    def extract_features(self, image_input):
         """Extract features from an image for training or prediction."""
         # Preprocess image
-        image_array = self._preprocess_image(image_path)
+        image_array = self._preprocess_image(image_input)
         
         # Calculate basic image metrics
         brightness = np.mean(image_array) / 255.0
@@ -81,12 +83,12 @@ class CleanlinessModel:
         
         return features
     
-    def predict(self, image_path):
+    def predict(self, image_input):
         """Predict cleanliness of an image."""
         if self.classifier is None:
             raise Exception("Model not trained yet!")
         
-        features = self.extract_features(image_path)
+        features = self.extract_features(image_input)
         prediction = self.classifier.predict([features])[0]
         probability = self.classifier.predict_proba([features])[0]
         
@@ -296,16 +298,17 @@ def train_model(train_data_path, model_save_path, num_epochs=10, batch_size=32):
         return True
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Error training model: {str(e)}")
         return False
 
-# Example usage:
-if __name__ == "__main__":
-    # Initialize predictor
-    predictor = CleanlinessPredictor()
-    
-    # Example prediction
-    with open('example_image.jpg', 'rb') as f:
-        image_bytes = f.read()
-        result = predictor.predict(image_bytes)
-        print(result) 
+# The following lines are removed to prevent direct execution of training/prediction on file run.
+# if __name__ == "__main__":
+#     # Example usage:
+#     # To train the model:
+#     # train_model('path/to/your/training_data', 'models/cleanliness_classifier.joblib')
+#     # To predict:
+#     # predictor = CleanlinessModel()
+#     # result = predictor.predict('example_image.jpg')
+#     # print(result) 

@@ -10,10 +10,11 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import exifread
 from numpy.linalg import norm
-from cleanliness_model import CleanlinessPredictor
+from cleanliness_model import CleanlinessModel
 import json
 import os
 from datetime import datetime
+import base64
 
 app = Flask(__name__)
 
@@ -23,15 +24,28 @@ def load_images_db():
     if os.path.exists(IMAGES_DB_FILE):
         try:
             with open(IMAGES_DB_FILE, 'r') as f:
-                return json.load(f)
+                db = json.load(f)
+                # Decode image_bytes from base64
+                for entry in db:
+                    if 'image_bytes' in entry:
+                        entry['image_bytes'] = base64.b64decode(entry['image_bytes'])
+                return db
         except Exception as e:
             print(f"Error loading images database: {str(e)}")
     return []
 
 def save_images_db(images_db):
     try:
+        # Encode image_bytes to base64 before saving
+        serializable_db = []
+        for entry in images_db:
+            new_entry = entry.copy()
+            if 'image_bytes' in new_entry:
+                new_entry['image_bytes'] = base64.b64encode(new_entry['image_bytes']).decode('utf-8')
+            serializable_db.append(new_entry)
+
         with open(IMAGES_DB_FILE, 'w') as f:
-            json.dump(images_db, f)
+            json.dump(serializable_db, f)
     except Exception as e:
         print(f"Error saving images database: {str(e)}")
 
@@ -50,7 +64,7 @@ limiter = Limiter(
 )
 
 # Initialize the predictor
-predictor = CleanlinessPredictor()
+predictor = CleanlinessModel()
 
 def haversine(lat1, lng1, lat2, lng2):
     R = 6371000 
