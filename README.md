@@ -19,6 +19,13 @@ This is a prototype web app for hospital cleaning staff to upload images of clea
 - **Rate limiting**: 5 uploads per minute per user/IP
 - **Simple web interface** for staff
 
+## Cleanliness Prediction Model
+
+This application incorporates a machine learning model (`cleanliness_model.py`) to predict the cleanliness of uploaded images. The model uses image features such as brightness, contrast, and edge intensity to classify rooms as 'Clean', 'Needs Attention', or 'Dirty'.
+
+- The trained model is saved in the `models/` directory as `cleanliness_classifier.joblib`.
+- The model can be updated based on labeled clean and dirty images to refine its prediction thresholds.
+
 ## Setup Instructions
 
 1. **Clone the repository**

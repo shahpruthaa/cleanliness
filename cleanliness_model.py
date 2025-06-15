@@ -5,6 +5,96 @@ from skimage.feature import hog
 from skimage import color, transform
 import os
 import json
+from sklearn.ensemble import RandomForestClassifier
+import joblib
+
+class CleanlinessModel:
+    def __init__(self):
+        self.model_path = os.path.join('models', 'cleanliness_classifier.joblib')
+        self.classifier = self._load_model()
+        if self.classifier is None:
+            self._initialize_default_model()
+        
+    def _load_model(self):
+        if os.path.exists(self.model_path):
+            try:
+                return joblib.load(self.model_path)
+            except Exception as e:
+                print(f"Error loading model: {str(e)}")
+                return None
+        return None
+    
+    def _initialize_default_model(self):
+        """Initialize a default RandomForestClassifier with reasonable parameters"""
+        self.classifier = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=10,
+            random_state=42
+        )
+        # Save the default model
+        os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
+        joblib.dump(self.classifier, self.model_path)
+    
+    def _preprocess_image(self, image_path):
+        try:
+            # Load and convert to grayscale
+            image = Image.open(image_path).convert('L')
+            
+            # Resize to standard size
+            image = image.resize((128, 128))
+            
+            # Convert to numpy array
+            image_array = np.array(image)
+            
+            return image_array
+        except Exception as e:
+            raise Exception(f"Error preprocessing image: {str(e)}")
+    
+    def extract_features(self, image_path):
+        """Extract features from an image for training or prediction."""
+        # Preprocess image
+        image_array = self._preprocess_image(image_path)
+        
+        # Calculate basic image metrics
+        brightness = np.mean(image_array) / 255.0
+        contrast = np.std(image_array) / 255.0
+        
+        # Calculate edge intensity
+        gradient_x = np.gradient(image_array, axis=0)
+        gradient_y = np.gradient(image_array, axis=1)
+        edge_intensity = np.mean(np.sqrt(gradient_x**2 + gradient_y**2)) / 255.0
+        
+        # Calculate HOG features
+        hog_features = hog(
+            image_array,
+            orientations=8,
+            pixels_per_cell=(16, 16),
+            cells_per_block=(1, 1),
+            visualize=False
+        )
+        
+        # Combine all features
+        features = np.concatenate([
+            [brightness, contrast, edge_intensity],
+            hog_features
+        ])
+        
+        return features
+    
+    def predict(self, image_path):
+        """Predict cleanliness of an image."""
+        if self.classifier is None:
+            raise Exception("Model not trained yet!")
+        
+        features = self.extract_features(image_path)
+        prediction = self.classifier.predict([features])[0]
+        probability = self.classifier.predict_proba([features])[0]
+        
+        return {
+            'prediction': 'Clean' if prediction == 1 else 'Messy',
+            'confidence': float(max(probability)),
+            'features': features.tolist()
+        }
 
 class CleanlinessPredictor:
     def __init__(self):
@@ -137,11 +227,77 @@ class CleanlinessPredictor:
             return {'error': str(e)}
 
 def train_model(train_data_path, model_save_path, num_epochs=10, batch_size=32):
-    """Train the cleanliness classifier"""
-    # This is a placeholder for the training function
-    # You'll need to implement data loading and training loop
-    # based on your specific dataset structure
-    pass
+    """Train the cleanliness classifier
+    
+    Args:
+        train_data_path (str): Path to directory containing training data
+            Expected structure:
+            train_data_path/
+                clean/
+                    image1.jpg
+                    image2.jpg
+                    ...
+                dirty/
+                    image1.jpg
+                    image2.jpg
+                    ...
+        model_save_path (str): Path to save the trained model
+        num_epochs (int): Number of training epochs
+        batch_size (int): Batch size for training
+    """
+    try:
+        # Initialize model
+        model = CleanlinessModel()
+        
+        # Load and preprocess training data
+        X = []  # Features
+        y = []  # Labels
+        
+        # Process clean images
+        clean_dir = os.path.join(train_data_path, 'clean')
+        if os.path.exists(clean_dir):
+            for img_file in os.listdir(clean_dir):
+                if img_file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    img_path = os.path.join(clean_dir, img_file)
+                    try:
+                        features = model.extract_features(img_path)
+                        X.append(features)
+                        y.append(1)  # 1 for clean
+                    except Exception as e:
+                        print(f"Error processing {img_path}: {str(e)}")
+        
+        # Process dirty images
+        dirty_dir = os.path.join(train_data_path, 'dirty')
+        if os.path.exists(dirty_dir):
+            for img_file in os.listdir(dirty_dir):
+                if img_file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    img_path = os.path.join(dirty_dir, img_file)
+                    try:
+                        features = model.extract_features(img_path)
+                        X.append(features)
+                        y.append(0)  # 0 for dirty
+                    except Exception as e:
+                        print(f"Error processing {img_path}: {str(e)}")
+        
+        if not X or not y:
+            raise Exception("No valid training data found")
+        
+        # Convert to numpy arrays
+        X = np.array(X)
+        y = np.array(y)
+        
+        # Train the model
+        model.classifier.fit(X, y)
+        
+        # Save the trained model
+        os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
+        joblib.dump(model.classifier, model_save_path)
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error training model: {str(e)}")
+        return False
 
 # Example usage:
 if __name__ == "__main__":

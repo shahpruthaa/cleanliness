@@ -3,6 +3,7 @@ from PIL import Image
 import io
 import time
 import math
+import datetime
 from skimage.metrics import structural_similarity as ssim
 import numpy as np
 from flask_limiter import Limiter
@@ -10,10 +11,32 @@ from flask_limiter.util import get_remote_address
 import exifread
 from numpy.linalg import norm
 from cleanliness_model import CleanlinessPredictor
+import json
+import os
+from datetime import datetime
 
 app = Flask(__name__)
 
-images_db = []  
+IMAGES_DB_FILE = 'images_db.json'
+
+def load_images_db():
+    if os.path.exists(IMAGES_DB_FILE):
+        try:
+            with open(IMAGES_DB_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading images database: {str(e)}")
+    return []
+
+def save_images_db(images_db):
+    try:
+        with open(IMAGES_DB_FILE, 'w') as f:
+            json.dump(images_db, f)
+    except Exception as e:
+        print(f"Error saving images database: {str(e)}")
+
+# Load existing images database
+images_db = load_images_db()
 
 HOSPITAL_LAT = 37.4219999
 HOSPITAL_LNG = -122.0840575
@@ -117,12 +140,10 @@ def upload():
         exif_lat = dms_to_dd(tags['GPS GPSLatitude'], tags['GPS GPSLatitudeRef'].values)
         exif_lng = dms_to_dd(tags['GPS GPSLongitude'], tags['GPS GPSLongitudeRef'].values)
     if 'EXIF DateTimeOriginal' in tags:
-        import datetime
-        import time as time_mod
         exif_time_str = str(tags['EXIF DateTimeOriginal'])
         try:
             exif_time_struct = datetime.datetime.strptime(exif_time_str, '%Y:%m:%d %H:%M:%S')
-            exif_time = time_mod.mktime(exif_time_struct.timetuple())
+            exif_time = time.mktime(exif_time_struct.timetuple())
         except Exception:
             exif_time = None
 
@@ -153,7 +174,8 @@ def upload():
         if similarity > 0.95:
             return jsonify({'error': 'Image too similar to previous upload', 'similarity': float(similarity)}), 400
 
-    images_db.append({
+    # Create new entry
+    new_entry = {
         'lat': lat,
         'lng': lng,
         'timestamp': timestamp,
@@ -161,8 +183,13 @@ def upload():
         'exif_lat': exif_lat,
         'exif_lng': exif_lng,
         'exif_time': exif_time,
-        'cleanliness': cleanliness_result
-    })
+        'cleanliness': cleanliness_result,
+        'upload_time': datetime.now().isoformat()
+    }
+    
+    # Add to database and save
+    images_db.append(new_entry)
+    save_images_db(images_db)
     
     return jsonify({
         'success': True,
